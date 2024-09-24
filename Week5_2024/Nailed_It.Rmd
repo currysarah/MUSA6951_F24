@@ -1,0 +1,311 @@
+---
+title: "Week 5 Storytelling Graphs"
+author: "Elizabeth Delmelle"
+date: "2025-09-18"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(lemon)
+library(ggtext)
+library(tidycensus)
+library(lubridate)
+library(dplyr)
+library(grid)
+source("helper_functions.R")
+source("theme/theme_swd.R")
+theme_set(theme_swd())
+```
+
+The first graph we are going to create is a scatterplot
+
+```{r figure 206 pre_processing}
+
+df <- read_csv(file.path("data", "FIG0206-7.csv")) %>% 
+  mutate(`Cost Per Mile` = as.numeric(str_remove_all(`Cost Per Mile`,"\\$"))) 
+
+avg_miles <- mean(df$`Miles Driven`)
+avg_cost <- mean(df$`Cost Per Mile`)
+```
+
+Now to the plot
+
+```{r scatterplot 1}
+pt <- ggplot(df) + 
+  geom_point(aes(x = `Miles Driven`,y = `Cost Per Mile`), color = GRAY9, size = 2.5) +
+  scale_y_continuous(breaks = seq(0,3.5,.5), limits = c(0,3), labels = scales::dollar_format()) + 
+  scale_x_continuous(limits = c(0,4000), label = scales::comma) +
+  geom_point(x = avg_miles, y = avg_cost, size=3.5) + 
+  geom_text(x = avg_miles, y = avg_cost, label = "AVG", hjust = 1.25) +  
+  labs(title = "Cost per mile by miles driven", x = "Miles driven per month", y = "Cost per mile") +
+  coord_capped_cart(bottom = "right", left = "top")
+  
+  pt %>% 
+  save_and_show_plot(width = 5, height = 4, "FIG0206.png")
+```
+
+Here we are going to snaz it up and make points above the average one color
+
+```{r fig207 pre_process}
+df <- read_csv(file.path("data", "FIG0206-7.csv")) %>% 
+  mutate(`Cost Per Mile` = parse_number(`Cost Per Mile`),
+         avg_miles = mean(`Cost Per Mile`, na.rm = TRUE),
+         avg_cost = mean(`Cost Per Mile`, na.rm = TRUE),
+         color = if_else(`Cost Per Mile` < avg_miles, GRAY9, ORANGE1))
+
+avg_miles <- mean(df$`Miles Driven`)
+avg_cost <- mean(df$`Cost Per Mile`)
+```
+
+Now we will make the graph
+
+```{r figure207}
+pt <- ggplot(df) + 
+  geom_point(aes(x=`Miles Driven`,y=`Cost Per Mile`, color = color), size = 3) +
+  scale_color_identity() + 
+  scale_y_continuous(breaks = seq(0,3,.5), limits = c(0,3),labels = scales::dollar_format()) + 
+  scale_x_continuous(limits = c(0,4000), label = scales::comma) + 
+  geom_hline(yintercept = avg_cost, linetype = "longdash") + 
+  geom_point(x = avg_miles,y=avg_cost,size=3.5) + 
+  geom_label(x = avg_miles, y = avg_cost, label = "AVG", hjust = 1.25, label.size = 0) +  
+  labs(title = "Cost per mile by miles driven", x = "Miles driven per month", y = "Cost per mile") +
+  coord_capped_cart(bottom = "right", left = "top")
+
+pt %>% 
+  save_and_show_plot(width = 4.5, height = 4.2, "FIG0207.png")
+```
+Challenge time!
+get some census data and make a modified scatterplot. Add two lines and highlight counties that are above the median income and above the median age.
+
+```{r getcensus}
+library(tidycensus)
+
+pa_wide <- get_acs(
+  geography = "county",
+  state = "Pennsylvania",
+  variables = c(medinc = "B19013_001",
+                medage = "B01002_001"),
+  output = "wide",
+  year = 2020
+)
+
+
+
+```
+
+Here is where we will do the mapping
+
+```{r nailtedit1}
+
+
+```
+
+Now let's explore the line graph
+
+```{r data_fig209}
+df <- read_csv(file.path("data", "FIG0209.csv")) %>% mutate(date = ymd(paste(Year, Month, 1)))
+```
+
+Here we will make the graph
+
+```{r fig209}
+pt <- ggplot(df, aes(x = date)) +
+  geom_ribbon(aes(ymin = Min, ymax = Max), fill = GRAY9) +
+  geom_line(aes(y = Avg), size = 2, color = GRAY4) +
+  geom_point(aes(y = Avg), size = 1, data = df %>% slice(1), color = GRAY4) +
+  geom_point(aes(y = Avg), size = 4, data = df %>% slice(n()), color = GRAY4) +
+  geom_text(aes(y = Min), hjust = -0.1, vjust = -1.1, color = GRAY5, parse = T, label = sprintf("bold(MIN)"), data = df %>% slice(1)) +
+  geom_text(aes(y = Avg), hjust = -0.1, vjust = -0.5, parse = T, label = "bold(AVG)", data = df %>% slice(1)) +
+  geom_text(aes(y = Max), hjust = -0.1, vjust = 2, color = GRAY5, parse = T, label = "bold(MAX)", data = df %>% slice(1)) +
+  geom_text(aes(y = Avg, label = paste0("bold(", Avg, ")")), parse = T, nudge_x = 15, data = df %>% slice(n())) +
+  scale_y_continuous(breaks = seq(0, 40, 5), limit = c(0, 40)) +
+  scale_x_date(
+    date_labels = "%b", breaks = df$date, expand = c(0, 0),
+    limits = c(ymd("2014-08-16", ymd("2015-10-01")))
+  ) +
+  labs(y = "Wait time (minutes)", x = NULL, title = "Passport control wait time", subtitle = "Past 13 months")
+
+pt %>% 
+  save_and_show_plot(width = 6, height = 4, "FIG0209.png")
+
+```
+
+Now the nailed it challenge is to re-create using longitudinal census data
+
+```{r longitudinaldata}
+years <- 2005:2019
+names(years) <- years
+
+philly_value <- map_dfr(years, ~{
+  get_acs(
+    geography = "county",
+    variables = "B25077_001",
+    state = "PA",
+    county = "Philadelphia",
+    year = .x,
+    survey = "acs1"
+  )
+}, .id = "year")
+```
+
+Now for the nailed it graph! Rather than using the min and max fields from the previous example, use the estimate +/- MOE. Feel free to modify it so it looks BETTER than the sampler. 
+
+```{r naileditlinegraph}
+
+
+```
+
+
+Let's try another example with some visual order. This is Figure 3.14 from SWD book
+
+
+```{r Fig314}
+library(tidyverse)
+library(forcats)
+library(lemon)
+library(ggtext)
+source("helper_functions.R")
+
+# Read the CSV file from the specified path and load it into a dataframe
+df <- read_csv(file.path("data", "FIG0314.csv")) %>%
+  
+  # Parse the 'value' column as a number and divide by 100 to convert percentages to proportions
+  mutate(value = parse_number(value) / 100) %>%
+  
+  # Reorder the 'category' factor levels and reverse the order for a desired display order in plots
+  mutate(category = fct_rev(fct_relevel(
+    factor(category), # Convert 'category' column to a factor to control the order
+    "Demonstration of results",    # Set the first level (highest priority) in the order
+    "Content expertise",           # Followed by 'Content expertise'
+    "Local knowledge",             # Continue setting levels in the desired order
+    "National reputation",
+    "Affordability of services",
+    "Previous work together",
+    "Colleague recommendation"     # The last level (lowest priority)
+  ))) %>%
+  
+  # Create a new 'fill' column to assign colors based on the category
+  mutate(fill = case_when(
+    category == "Demonstration of results" ~ GRAY2,          # Assign GRAY2 color for 'Demonstration of results'
+    category == "Affordability of services" ~ GRAY2,         # Assign GRAY2 color for 'Affordability of services'
+    category == "Previous work together" ~ GRAY2,            # Assign GRAY2 color for 'Previous work together'
+    TRUE ~ GRAY8                                             # Assign GRAY8 color for all other categories
+  ))
+
+
+pt <- ggplot(df, aes(x = category, y = value)) +
+  geom_col(aes(fill = fill), width = .8) +
+  scale_x_discrete() +
+  scale_y_continuous(position = "right", limits = c(0, .8), labels = scales::percent) +
+  scale_fill_identity() +
+  coord_capped_flip(top = "both") +
+  labs(
+    caption = "Data source: xyz; indluces N number of survey respondents.\nNote that respondents were able to choose up to 3 options.",
+    y = "% selecting given attribute",
+    title = "**Demonstrating effectiveness** is most important consideration <br/>when selecting a provider <br />",
+    subtitle = "In general, **what attributes are the most important** <br/>to you in selecting a service provider ? <br/> (Choose up to 3)"
+  )+
+  theme(
+    plot.title = element_markdown(size = 14),   # Enables Markdown parsing for the title
+    plot.subtitle = element_markdown(size = 10), # Enables Markdown parsing for the subtitle
+    plot.caption = element_text(size = 8)
+  )
+
+
+pt %>% 
+  save_and_show_plot(width = 6, height = 4, file_name = "FIG0314.png")
+
+
+
+
+
+
+
+```
+
+
+Apply those same principles to spruce up a boring old census bar chart! Best in show wins the award.
+There is no award. We all win.
+
+```{r bestinshow}
+library(tidycensus)
+library(tidyverse)
+
+metros <-  get_acs(
+  geography = "cbsa",
+  variables = "DP03_0021P",
+  summary_var = "B01003_001",
+  survey = "acs1",
+  year = 2019
+) %>%
+  slice_max(summary_est, n = 20)
+
+metros %>%
+  mutate(NAME = str_remove(NAME, "-.*$")) %>%
+  mutate(NAME = str_remove(NAME, ",.*$")) %>%
+  ggplot(aes(y = reorder(NAME, estimate), x = estimate)) + 
+  geom_col()
+
+
+metros %>%
+  mutate(NAME = str_remove(NAME, "-.*$")) %>%
+  mutate(NAME = str_remove(NAME, ",.*$")) %>%
+  ggplot(aes(y = reorder(NAME, estimate), x = estimate)) + 
+  geom_col() +  
+  theme_minimal() + 
+  labs(title = "Public transit commute share", 
+       subtitle = "2019 1-year ACS estimates", 
+       y = "", 
+       x = "ACS estimate", 
+       caption = "Source: ACS Data Profile variable DP03_0021P via the tidycensus R package") 
+
+
+
+```
+
+
+Spice it up here:
+
+```{r}
+
+```
+
+
+Bees?? Can you update this beeswarm map following the tidytuesday example from the ppt?
+
+```{r}
+library(ggbeeswarm)
+
+ny_race_income <- get_acs(
+  geography = "tract", 
+  state = "NY",  
+  county = c("New York", "Bronx", "Queens", "Richmond", "Kings"),
+  variables = c(White = "B03002_003", 
+                Black = "B03002_004", 
+                Asian = "B03002_006",
+                Hispanic = "B03002_012"), 
+  summary_var = "B19013_001",
+  year = 2020
+) %>%
+  group_by(GEOID) %>%
+  filter(estimate == max(estimate, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(estimate != 0)
+
+ggplot(ny_race_income, aes(x = variable, y = summary_est, color = summary_est)) +
+  geom_quasirandom(alpha = 0.5) + 
+  coord_flip() + 
+  theme_minimal(base_size = 13) + 
+  scale_color_viridis_c(guide = "none") + 
+  scale_y_continuous(labels = label_dollar()) + 
+  labs(x = "Largest group in Census tract", 
+       y = "Median household income", 
+       title = "Household income distribution by largest racial/ethnic group", 
+       subtitle = "Census tracts, New York City", 
+       caption = "Data source: 2016-2020 ACS")
+```
+
+
+
+
