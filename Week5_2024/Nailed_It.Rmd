@@ -170,22 +170,16 @@ Now for the nailed it graph! Rather than using the min and max fields from the p
 
 ```{r naileditlinegraph}
 
-sentence = list("lowest level in 2013 before rising again.",
-                "and housing prices fell to their",
-                "The housing bubble peaked in 2009",
-                "Great Recession" 
-                )
+sentence = list("Great Recession \n The housing bubble peaked in 2009 \n and housing prices fell to their \n lowest level in 2013 before rising again.")
 
 ggplot(philly_value, aes(x = as.numeric(year))) +
   geom_ribbon(aes(ymin = estimate - moe, ymax = estimate + moe), fill = "gray90") +
   geom_line(aes(y = estimate), size = 2, color = ORANGE1) +
   geom_point(aes(y = estimate), data = philly_value %>% filter(as.numeric(year) >= 2013), color = "black") +
   geom_vline(xintercept = 2009, linetype = "longdash", size = 1) +
-  annotate(geom = "text", x = 2009.5, y = seq(115000,130000, length = 4), 
-           hjust = 0,
-           label = sentence,
-           size=3
-           ) +
+  annotate(geom = "text", x = 2009.5, y = 125000, 
+           hjust = 0, size = 3,
+           label = sentence) +
   scale_x_continuous(breaks = seq(2005,2019,1)) +
   scale_y_continuous(labels = scales::label_dollar(scale_cut = scales::cut_short_scale())) +
   labs(
